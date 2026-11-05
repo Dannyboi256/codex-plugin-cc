@@ -17,12 +17,39 @@ import { terminateProcessTree } from "../plugins/codex/scripts/lib/process.mjs";
 // detached broker that outlives the file, so the after() hook below stops each one when the file ends.
 const createdWorkspaces = new Set();
 
-// Set CODEX_PLUGIN_TEST_DEBUG=1 to print broker cleanup debug lines to stderr.
+// Set CODEX_PLUGIN_TEST_DEBUG=1 to print env cleanup and broker cleanup debug lines to stderr.
 function debug(message) {
   if (process.env.CODEX_PLUGIN_TEST_DEBUG === "1") {
     process.stderr.write(`[test-helpers] ${message}\n`);
   }
 }
+
+// A Claude Code session exports CLAUDE_PLUGIN_DATA, CODEX_COMPANION_SESSION_ID and
+// CODEX_COMPANION_TRANSCRIPT_PATH into its shells, and the plugin's hooks also read CLAUDE_ENV_FILE and
+// CLAUDE_PROJECT_DIR. Inherited, they send test state to the real plugin data dir and filter jobs by the real
+// session. Test files that read plugin state or run the companion import this module, directly or through
+// fake-codex-fixture.mjs, so unsetting them here covers in-process calls and every child that inherits or
+// spreads process.env. Tests that set one of them explicitly, in a child env or in process.env, are unaffected.
+const INHERITED_SESSION_ENV = [
+  "CLAUDE_PLUGIN_DATA",
+  "CODEX_COMPANION_SESSION_ID",
+  "CODEX_COMPANION_TRANSCRIPT_PATH",
+  "CLAUDE_ENV_FILE",
+  "CLAUDE_PROJECT_DIR"
+];
+
+function removeInheritedSessionEnv() {
+  debug("enter removeInheritedSessionEnv");
+  for (const name of INHERITED_SESSION_ENV) {
+    if (process.env[name] !== undefined) {
+      delete process.env[name];
+      debug(`removed inherited ${name}`);
+    }
+  }
+  debug("exit removeInheritedSessionEnv");
+}
+
+removeInheritedSessionEnv();
 
 async function stopCreatedWorkspaceBrokers() {
   debug(`enter stopCreatedWorkspaceBrokers workspaces=${createdWorkspaces.size}`);
